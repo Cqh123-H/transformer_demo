@@ -38,3 +38,59 @@ class Generator(nn.Module):
     def __int__(self, d_model, vocab):
         super(Generator, self).__init__()
         self.proj = nn.Linear(d_model, vocab)
+# Encoder
+"""The encoder is composed of a stack of N=6 identical layers"""
+
+
+def clones(module, N):
+    """produce N identical layers"""
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
+
+
+class Encoder(nn.Module):
+    """Core encoder is a stack of N layers"""
+
+    def __int__(self, layer, N):
+        super(Encoder, self).__int__()
+        self.layers = clones(layer, N)
+        self.norm = LayerNorm(layer.size)
+
+    def forward(self, x, mask):
+        """Pass the input(and mask) through each layer in turn."""
+        for layer in self.layers:
+            x = layer(x, mask)
+        return self.norm(x)
+
+
+"""Employ a residual connection around each of the two sub-layers, followed by layer normalization"""
+
+
+class LayerNorm(nn.Module):
+    """Construct a layernorm module"""
+
+    def __int__(self, features, eps=1e-6):
+        super(LayerNorm, self).__int__()
+        self.a_2 = nn.Parameter(torch.ones(features))
+        self.b_2 = nn.Parameter(torch.zeros(features))
+        self.eps = eps
+
+    def forward(self, x):
+        mean = x.mean(-1, keepdim=True)
+        std = x.std(-1, keepdim=True)
+        return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
+
+
+class SublayerConnection(nn.Module):
+    """
+    A residual connection followed by a layer norm.
+    Note for code simplicity the norm is the first as opposed to last.
+    """
+
+    def __int__(self, size, dropout):
+        super(SublayerConnection, self).__int__()
+        self.norm = LayerNorm(size)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, sublayer):
+        """Apply residual connection to any sublayer with the same size."""
+        return x + self.dropout(sublayer(self.norm(x)))
