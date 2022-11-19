@@ -94,3 +94,83 @@ class SublayerConnection(nn.Module):
     def forward(self, x, sublayer):
         """Apply residual connection to any sublayer with the same size."""
         return x + self.dropout(sublayer(self.norm(x)))
+
+"""Each layer has two sub-layers.The first is a multi-head self-attention mechanism,and the second a simple, 
+position-wise fully connected feed-forward network."""
+
+
+class EncoderLayer(nn.Module):
+    """Encoder is made up of self-attn and feed forward"""
+
+    def __init__(self, size, self_attn, feed_forward, dropout):
+        super(EncoderLayer, self).__init__()
+        self.self_attn = self_attn
+        self.feed_forward = feed_forward
+        self.sublayer = clones(SublayerConnection(size, dropout), 2)
+        self.size = size
+
+    def forward(self, x, mask):
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
+        return self.sublayer[1](x, self.feed_forward)
+
+
+# Decoder
+"""The decoder is also composed of a stack of N=6 identical layers"""
+
+
+class Decoder(nn.Module):
+    """Generic N layer decoder with masking."""
+
+    def __int__(self, layer, N):
+        super(Decoder, self).__int__()
+        self.layers = clones(layer, N)
+        self.norm = LayerNorm(layer.size)
+
+    def forward(self, x, memory, src_mask, tgt_mask):
+        for layer in self.layers:
+            x = layer(x, memory, src_mask, tgt_mask)
+        return self.norm(x)
+
+
+class DecoderLayer(nn.Module):
+    """Decoder is made up of self-attn, src_attn and feed forward"""
+
+    def __init__(self, size, self_attn, src_attn, feed_forward, dropout):
+        super(DecoderLayer, self).__init__()
+        self.size = size
+        self.self_attn = self_attn
+        self.src_attn = src_attn
+        self.feed_forward = feed_forward
+        self.sublayer = clones(SublayerConnection(size, dropout), 3)
+
+    def forward(self, x, memory, src_mask, tgt_mask):
+        m = memory
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask))
+        x = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask))
+        return self.sublayer[2](x, self.feed_forward)
+
+
+def subsequent_mask(size):
+    """Mask out subsequent positions."""
+    attn_shape = (1, size, size)
+    # subsequent_mask = np.triu(np.ones(attn_shape), k=1).astype('unit-8')
+    subsequent_mask = np.triu(np.ones(attn_shape), k=1)
+    # print(subsequent_mask)
+    # print(torch.from_numpy(subsequent_mask) == 0)
+    return torch.from_numpy(subsequent_mask) == 0
+
+
+# # torch.from_numpy将数组转化为tensor
+# plt.figure(figsize=(5, 5))
+# plt.imshow(subsequent_mask(20)[0])
+# plt.show()
+def attention(query, key, value, mask=None, dropout=None):
+    """Compute 'Scaled Dot Product Attention'"""
+    d_k = query.size(-1)
+    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, 1e-9)
+    p_attn = F.softmax(scores, dim=-1)
+    if dropout is not None:
+        p_attn = dropout(p_attn)
+    return torch.matmul(p_attn, value), p_attn
